@@ -1,0 +1,8 @@
+<span class="chip @Kind @(Hit ? "hit" : "")" title="@Title">@Allele</span>
+
+@code {
+    [Parameter, EditorRequired] public string Allele { get; set; } = "";
+    [Parameter] public string Kind { get; set; } = "";
+    [Parameter] public bool Hit { get; set; }
+    [Parameter] public string? Title { get; set; }
+}

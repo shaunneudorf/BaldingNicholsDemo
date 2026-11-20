@@ -1,0 +1,276 @@
+@using System.Globalization
+
+@{
+    var m = Evaluate();
+    var main = m.With?.Victim.Count == 2 ? m.With : m.Alone;
+}
+
+<header class="masthead">
+    <h1>Balding-Nichols likelihood ratio</h1>
+    <p>
+        Build the unknown contributor's genotype one allele at a time and see how an assumed
+        contributor, such as a victim, changes the match probability for a suspect.
+    </p>
+</header>
+
+<div class="bench">
+    <section class="inputs" aria-label="Inputs">
+        <h2>Inputs</h2>
+
+        <label class="field">
+            <span class="field-label">θ (co-ancestry, FST)</span>
+            <input type="number" step="any" min="0" max="0.999" @bind="theta" @bind:event="onchange" />
+        </label>
+
+        <fieldset>
+            <legend><span class="swatch victim"></span>Victim (assumed contributor)</legend>
+            <label class="check">
+                <input type="checkbox" @bind="includeVictim" />
+                <span>Include victim in the mixture</span>
+            </label>
+            <div class="pair">
+                <label class="field">
+                    <span class="field-label">Allele 1</span>
+                    <input type="text" @bind="v1" @bind:event="oninput" disabled="@(!includeVictim)" />
+                </label>
+                <label class="field">
+                    <span class="field-label">Allele 2</span>
+                    <input type="text" @bind="v2" @bind:event="oninput" disabled="@(!includeVictim)" />
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend><span class="swatch suspect"></span>Suspect (person of interest)</legend>
+            <div class="pair">
+                <label class="field">
+                    <span class="field-label">Allele 1</span>
+                    <input type="text" @bind="s1" @bind:event="oninput" />
+                </label>
+                <label class="field">
+                    <span class="field-label">Allele 2</span>
+                    <input type="text" @bind="s2" @bind:event="oninput" />
+                </label>
+            </div>
+            <div class="pair">
+                <label class="field">
+                    <span class="field-label">Frequency of @(Label(s1))</span>
+                    <input type="number" step="any" min="0" max="1" @bind="f1" @bind:event="onchange" />
+                </label>
+                <label class="field">
+                    <span class="field-label">Frequency of @(Label(s2))</span>
+                    <input type="number" step="any" min="0" max="1"
+                           value="@(SameAllele ? f1 : f2)" disabled="@SameAllele"
+                           @onchange="e => f2 = ParseFreq(e.Value)" />
+                </label>
+            </div>
+            <p class="hint">Only the suspect's alleles need frequencies. The victim's alleles add to the count of alleles already seen.</p>
+        </fieldset>
+
+        <button type="button" class="reset" @onclick="Reset">Reset to example</button>
+    </section>
+
+    <section class="results" aria-live="polite">
+        @if (m.Error is not null)
+        {
+            <p class="notice">@m.Error</p>
+        }
+        else
+        {
+            <div class="answer">
+                <div class="answer-lr">
+                    <span class="answer-number">@(main!.LikelihoodRatio.ToString("N2", Inv))</span>
+                    <span class="answer-caption">likelihood ratio</span>
+                </div>
+                <p class="answer-eq">
+                    Pr(E|Hp) ÷ Pr(E|Hd) = 1 ÷ @(P(main!.GenotypeProbability))
+                    <br />
+                    <span class="muted">
+                        Hp: @(main.Victim.Count == 2 ? "victim and suspect" : "the suspect") contributed.
+                        Hd: @(main.Victim.Count == 2 ? "victim and an unknown person" : "an unknown person") contributed.
+                    </span>
+                </p>
+            </div>
+
+            <h2>Three ways to get the match probability</h2>
+            <table class="compare">
+                <thead>
+                    <tr><th>Method</th><th>Alleles seen (n)</th><th>Pr(unknown has suspect genotype)</th><th>LR</th></tr>
+                </thead>
+                <tbody>
+                    @if (m.With?.Victim.Count == 2)
+                    {
+                        <tr class="current">
+                            <td>Balding-Nichols, victim and suspect</td>
+                            <td>@(m.With!.Conditioning.Count)</td>
+                            <td>@(P(m.With!.GenotypeProbability))</td>
+                            <td>@(m.With!.LikelihoodRatio.ToString("N2", Inv))</td>
+                        </tr>
+                    }
+                    <tr class="@(m.With?.Victim.Count == 2 ? "" : "current")">
+                        <td>Balding-Nichols, suspect only (NRC II 4.2)</td>
+                        <td>@(m.Alone!.Conditioning.Count)</td>
+                        <td>@(P(m.Alone!.GenotypeProbability))</td>
+                        <td>@(m.Alone!.LikelihoodRatio.ToString("N2", Inv))</td>
+                    </tr>
+                    <tr>
+                        <td>Product rule (θ = 0)</td>
+                        <td>none</td>
+                        <td>@P(m.ProductProbability)</td>
+                        <td>@((1 / m.ProductProbability).ToString("N2", Inv))</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Alleles already seen</h2>
+            <div class="pool">
+                @if (main.Victim.Count == 2)
+                {
+                    <span class="pool-group">
+                        Victim
+                        @foreach (var a in main.Victim)
+                        {
+                            <Chip Allele="@a" Kind="victim" Title="Victim allele" />
+                        }
+                    </span>
+                }
+                <span class="pool-group">
+                    Suspect
+                    @foreach (var a in main.Suspect)
+                    {
+                        <Chip Allele="@a" Kind="suspect" Title="Suspect allele" />
+                    }
+                </span>
+                <span class="pool-count">n = @(main!.Conditioning.Count)</span>
+            </div>
+
+            <h2>Drawing the unknown contributor</h2>
+            <p class="lede">
+                Each draw uses <strong>(x·θ + (1−θ)·p) ÷ (1 + (n−1)·θ)</strong>, where x is the number of
+                copies of the allele already seen, n is the total alleles seen, and p is the population
+                frequency. Highlighted chips are the copies counted in x.
+            </p>
+
+            @foreach (var order in main.Orders)
+            {
+                <table class="draws">
+                    <caption>@order.Label: @string.Join(" then ", order.Draws.Select(d => d.Allele))</caption>
+                    <thead>
+                        <tr><th>Draw</th><th>Seen so far</th><th>x</th><th>n</th><th>Calculation</th><th>Result</th></tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < order.Draws.Count; i++)
+                        {
+                            var d = order.Draws[i];
+                            <tr>
+                                <td>@d.Step</td>
+                                <td class="seen">
+                                    @foreach (var a in main.Victim)
+                                    {
+                                        <Chip Allele="@a" Kind="victim" Hit="@Same(a, d.Allele)" />
+                                    }
+                                    @foreach (var a in main.Suspect)
+                                    {
+                                        <Chip Allele="@a" Kind="suspect" Hit="@Same(a, d.Allele)" />
+                                    }
+                                    @foreach (var prev in order.Draws.Take(i))
+                                    {
+                                        <Chip Allele="@prev.Allele" Kind="unknown" Hit="@Same(prev.Allele, d.Allele)" Title="Already drawn for the unknown" />
+                                    }
+                                </td>
+                                <td>@d.X</td>
+                                <td>@d.N</td>
+                                <td class="calc">@Formula(d)</td>
+                                <td class="num">@d.Term.ToString("0.000000", Inv)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5">Probability of this order</td>
+                            <td class="num">@order.Probability.ToString("0.000000", Inv)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+
+            <p class="lede">
+                @if (main.IsHomozygous)
+                {
+                    <text>The suspect is homozygous, so there is only one order to count.</text>
+                }
+                else
+                {
+                    <text>The unknown could carry the two alleles in either order, so the two orders are added:
+                    @string.Join(" + ", main.Orders.Select(o => o.Probability.ToString("0.000000", Inv))) =
+                    <strong>@(main!.GenotypeProbability.ToString("0.000000", Inv))</strong>.</text>
+                }
+            </p>
+
+            <h2>What this model assumes</h2>
+            <ul class="assumptions">
+                <li>Pr(E|Hp) is 1: the assumed contributors plus the suspect fully explain the mixture.</li>
+                <li>Under Hd the unknown is taken to have exactly the suspect's genotype. Casework software such as STRmix instead sums over every genotype that could explain the mixture, weighted by peak heights, so its LR will differ.</li>
+                <li>Both the victim and the suspect are treated as already sampled from the subpopulation, which is why they count toward x and n.</li>
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private const double ExampleFrequency = 0.161398176291793;
+
+    private double theta = 0.01;
+    private bool includeVictim = true;
+    private string v1 = "11", v2 = "12", s1 = "12", s2 = "13";
+    private double? f1 = ExampleFrequency, f2 = ExampleFrequency;
+
+    private bool SameAllele => string.Equals((s1 ?? "").Trim(), (s2 ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private void Reset()
+    {
+        theta = 0.01;
+        includeVictim = true;
+        v1 = "11"; v2 = "12"; s1 = "12"; s2 = "13";
+        f1 = f2 = ExampleFrequency;
+    }
+
+    private static double? ParseFreq(object? value) =>
+        double.TryParse(value?.ToString(), NumberStyles.Float, Inv, out var d) ? d : null;
+
+    private static string Label(string? allele) => string.IsNullOrWhiteSpace(allele) ? "allele" : allele.Trim();
+
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static string P(double v) => v.ToString("0.000000", Inv);
+
+    private static string N(double v) => v.ToString("0.######", Inv);
+
+    private static string Formula(Draw d) =>
+        $"({d.X} × {N(d.Theta)} + {N(1 - d.Theta)} × {N(d.Frequency)}) ÷ (1 + {d.N - 1} × {N(d.Theta)})";
+
+    private sealed record Evaluation(LocusResult? With, LocusResult? Alone, double ProductProbability, string? Error);
+
+    private Evaluation Evaluate()
+    {
+        try
+        {
+            var a1 = (s1 ?? "").Trim();
+            var a2 = (s2 ?? "").Trim();
+            var freqs = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (a1.Length > 0 && f1 is double x1) freqs[a1] = x1;
+            if (a2.Length > 0 && !Same(a1, a2) && f2 is double x2) freqs[a2] = x2;
+
+            var suspect = new[] { a1, a2 };
+            var alone = BnCalculator.Compute(theta, Array.Empty<string>(), suspect, freqs);
+            var with = includeVictim ? BnCalculator.Compute(theta, new[] { v1, v2 }, suspect, freqs) : null;
+            var product = BnCalculator.ProductRuleProbability(suspect, freqs);
+            return new Evaluation(with, alone, product, null);
+        }
+        catch (ArgumentException ex)
+        {
+            return new Evaluation(null, null, 0, ex.Message);
+        }
+    }
+}
