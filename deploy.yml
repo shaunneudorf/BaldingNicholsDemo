@@ -32,9 +32,6 @@ jobs:
       - name: Publish
         run: dotnet publish src/BaldingNichols.Web -c Release -o release
 
-      - name: Fix base href
-        run: sed -i 's|<base href="/BaldingNicholsDemo/" />|<base href="/BaldingNicholsDemo/" />|' release/wwwroot/index.html || true
-
       - name: Add .nojekyll
         run: touch release/wwwroot/.nojekyll
 
