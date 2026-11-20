@@ -1,12 +1,19 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.9.12112.369 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BaldingNichols.Core", "src\BaldingNichols.Core\BaldingNichols.Core.csproj", "{A1B2C3D4-0001-4000-8000-000000000001}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BaldingNichols.Web", "src\BaldingNichols.Web\BaldingNichols.Web.csproj", "{A1B2C3D4-0002-4000-8000-000000000002}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BaldingNichols.Tests", "tests\BaldingNichols.Tests\BaldingNichols.Tests.csproj", "{A1B2C3D4-0003-4000-8000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{20BFEA18-FD2E-42D4-B4E5-5C98E18EC990}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{FC8AD8EB-C736-4B72-87C8-7BA82F8D570A}"
+	ProjectSection(SolutionItems) = preProject
+		deploy.yml = deploy.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,5 +36,11 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{FC8AD8EB-C736-4B72-87C8-7BA82F8D570A} = {20BFEA18-FD2E-42D4-B4E5-5C98E18EC990}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {35BCEE68-346E-40F8-BA6C-2FB51E17F1FB}
 	EndGlobalSection
 EndGlobal
