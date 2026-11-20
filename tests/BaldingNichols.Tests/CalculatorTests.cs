@@ -52,8 +52,8 @@ public class CalculatorTests
     {
         double t = 0.01, p = 0.2;
         var r = BnCalculator.Compute(t, ["11", "12"], ["12", "12"], Freqs(("12", p)));
-        double a = (2 * t + (1 - t) * p) / (1 + 3 * t);   // x=2, n=4
-        double b = (3 * t + (1 - t) * p) / (1 + 4 * t);   // x=3, n=5
+        double a = (3 * t + (1 - t) * p) / (1 + 3 * t);   // x=3, n=4
+        double b = (4 * t + (1 - t) * p) / (1 + 4 * t);   // x=4, n=5
         Assert.Equal(a * b, r.GenotypeProbability, 12);
         Assert.Single(r.Orders);
     }
