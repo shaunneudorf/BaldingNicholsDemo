@@ -33,6 +33,9 @@ jobs:
       - name: Point base href at the repository path
         run: sed -i 's|<base href="/" />|<base href="/${{ github.event.repository.name }}/" />|' release/wwwroot/index.html
 
+      - name: Cache-bust the stylesheet
+        run: sed -i 's|css/app.css|css/app.css?v=${{ github.sha }}|' release/wwwroot/index.html
+
       - name: Disable Jekyll
         run: touch release/wwwroot/.nojekyll
 
