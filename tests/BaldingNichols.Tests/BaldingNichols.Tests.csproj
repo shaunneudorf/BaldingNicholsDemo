@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\src\BaldingNichols.Web\wwwroot\data\Caucasian_database.csv" Link="Caucasian_database.csv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BaldingNichols.Core\BaldingNichols.Core.csproj" />
   </ItemGroup>
 

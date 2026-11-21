@@ -1,0 +1,132 @@
+@* The complete formula for one calculation, worked from symbols to the likelihood ratio. *@
+<div class="formula math" role="group" aria-label="Complete formula">
+    @if (Result is not null)
+    {
+        var order = Result.Orders[0];
+        var homo = Result.IsHomozygous;
+        var pa = order.Draws[0].Frequency;
+        var pb = order.Draws[1].Frequency;
+
+        <ul class="legend">
+            <li><i>θ</i> = @Fmt.Plain(Result.Theta)</li>
+            <li><i>n</i> = @Result.Conditioning.Count alleles already seen</li>
+        </ul>
+
+        <FreqDef Sub="1" Allele="@Result.Suspect[0]" Value="@pa" Basis="@Basis1" />
+        @if (!homo)
+        {
+            <FreqDef Sub="2" Allele="@Result.Suspect[1]" Value="@pb" Basis="@Basis2" />
+        }
+
+        <div class="math-row">
+            <span class="lhs">Pr(<i>E</i> | <i>H</i><sub>d</sub>)</span>
+            <span class="eq">=</span>
+            @if (!homo)
+            {
+                <span>2</span><span class="op">×</span>
+            }
+            @foreach (var d in order.Draws)
+            {
+                <Paren><DrawFrac D="d" Symbolic="true" Sub="@SubFor(d)" /></Paren>
+            }
+        </div>
+
+        <div class="math-row">
+            <span class="lhs"></span>
+            <span class="eq">=</span>
+            @if (!homo)
+            {
+                <span>2</span><span class="op">×</span>
+            }
+            @foreach (var d in order.Draws)
+            {
+                <Paren><DrawFrac D="d" Symbolic="false" /></Paren>
+            }
+        </div>
+
+        <div class="math-row">
+            <span class="lhs"></span>
+            <span class="eq">=</span>
+            <span>@Fmt.Prob(Result.GenotypeProbability)</span>
+        </div>
+
+        <div class="math-row final">
+            <span class="lhs">LR</span>
+            <span class="eq">=</span>
+            <Frac><Num>Pr(<i>E</i> | <i>H</i><sub>p</sub>)</Num><Den>Pr(<i>E</i> | <i>H</i><sub>d</sub>)</Den></Frac>
+            <span class="eq">=</span>
+            <Frac><Num>1</Num><Den>@Fmt.Prob(Result.GenotypeProbability)</Den></Frac>
+            <span class="eq">=</span>
+            <strong>@Fmt.Lr(Result.LikelihoodRatio)</strong>
+        </div>
+    }
+    else if (Product is not null)
+    {
+        var homo = Product.IsHomozygous;
+
+        <ul class="legend">
+            <li><i>θ</i> = 0, so no co-ancestry adjustment</li>
+        </ul>
+
+        <FreqDef Sub="1" Allele="@Product.Suspect[0]" Value="@Product.P1" Basis="@Basis1" />
+        @if (!homo)
+        {
+            <FreqDef Sub="2" Allele="@Product.Suspect[1]" Value="@Product.P2" Basis="@Basis2" />
+        }
+
+        <div class="math-row">
+            <span class="lhs">Pr(<i>E</i> | <i>H</i><sub>d</sub>)</span>
+            <span class="eq">=</span>
+            @if (homo)
+            {
+                <span><i>p</i><sub>1</sub><sup>2</sup></span>
+            }
+            else
+            {
+                <span>2</span><span><i>p</i><sub>1</sub></span><span><i>p</i><sub>2</sub></span>
+            }
+        </div>
+
+        <div class="math-row">
+            <span class="lhs"></span>
+            <span class="eq">=</span>
+            @if (homo)
+            {
+                <span>@Fmt.Plain(Product.P1)</span><span class="op">×</span><span>@Fmt.Plain(Product.P1)</span>
+            }
+            else
+            {
+                <span>2</span><span class="op">×</span><span>@Fmt.Plain(Product.P1)</span><span class="op">×</span><span>@Fmt.Plain(Product.P2)</span>
+            }
+        </div>
+
+        <div class="math-row">
+            <span class="lhs"></span>
+            <span class="eq">=</span>
+            <span>@Fmt.Prob(Product.Probability)</span>
+        </div>
+
+        <div class="math-row final">
+            <span class="lhs">LR</span>
+            <span class="eq">=</span>
+            <Frac><Num>Pr(<i>E</i> | <i>H</i><sub>p</sub>)</Num><Den>Pr(<i>E</i> | <i>H</i><sub>d</sub>)</Den></Frac>
+            <span class="eq">=</span>
+            <Frac><Num>1</Num><Den>@Fmt.Prob(Product.Probability)</Den></Frac>
+            <span class="eq">=</span>
+            <strong>@Fmt.Lr(Product.LikelihoodRatio)</strong>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public LocusResult? Result { get; set; }
+    [Parameter] public ProductRuleResult? Product { get; set; }
+
+    /// <summary>Where p₁ and p₂ came from (null if the value was typed in by hand).</summary>
+    [Parameter] public FrequencyLookup? Basis1 { get; set; }
+    [Parameter] public FrequencyLookup? Basis2 { get; set; }
+
+    // p₁ is the suspect's first allele, p₂ the second (a homozygote uses p₁ twice).
+    private string SubFor(Draw d) =>
+        string.Equals(d.Allele, Result!.Suspect[0], StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+}

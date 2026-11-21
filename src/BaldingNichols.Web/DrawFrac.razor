@@ -1,0 +1,39 @@
+@* One draw of the sampling formula, as a fraction:  (xθ + (1−θ)p) / (1 + (n−1)θ)
+   Symbolic shows θ and p₁/p₂ with the counts filled in; numeric shows the values. *@
+<Frac>
+    <Num>
+        @if (Symbolic)
+        {
+            @if (D.X > 1)
+            {
+                <span>@D.X</span>
+            }
+            <i>θ</i><span class="op">+</span><span>(1<span class="op">−</span><i>θ</i>)</span><i>p</i><sub>@Sub</sub>
+        }
+        else
+        {
+            <span>@D.X</span><span class="op">×</span><span>@Fmt.Plain(D.Theta)</span><span class="op">+</span><span>@Fmt.Plain(1 - D.Theta)</span><span class="op">×</span><span>@Fmt.Plain(D.Frequency)</span>
+        }
+    </Num>
+    <Den>
+        @if (Symbolic)
+        {
+            <span>1</span><span class="op">+</span>
+            @if (D.N - 1 > 1)
+            {
+                <span>@(D.N - 1)</span>
+            }
+            <i>θ</i>
+        }
+        else
+        {
+            <span>1</span><span class="op">+</span><span>@(D.N - 1)</span><span class="op">×</span><span>@Fmt.Plain(D.Theta)</span>
+        }
+    </Den>
+</Frac>
+
+@code {
+    [Parameter, EditorRequired] public Draw D { get; set; } = default!;
+    [Parameter] public bool Symbolic { get; set; }
+    [Parameter] public string Sub { get; set; } = "1";
+}

@@ -1,8 +1,10 @@
 @using System.Globalization
+@inject HttpClient Http
 
 @{
-    var m = Evaluate();
-    var main = m.With?.Victim.Count == 2 ? m.With : m.Alone;
+    var fr = Frequencies();
+    var m = Evaluate(fr);
+    var shown = Shown(m);
 }
 
 <header class="masthead">
@@ -16,6 +18,33 @@
 <div class="bench">
     <section class="inputs" aria-label="Inputs">
         <h2>Inputs</h2>
+
+        <label class="field">
+            <span class="field-label">Locus</span>
+            <select @bind="LocusName">
+                @if (db is not null)
+                {
+                    @foreach (var l in db.Loci)
+                    {
+                        <option value="@l.Name">@l.Name</option>
+                    }
+                }
+                <option value="">Manual entry</option>
+            </select>
+        </label>
+
+        @if (dbError is not null)
+        {
+            <p class="hint warn">@dbError</p>
+        }
+        else if (locus is not null)
+        {
+            <p class="hint">
+                N = @locus.N alleles in the database, k = @locus.K observed allele designations.
+                Balding-Nichols uses (x + 1/k) ÷ (N + 1) for every allele, which is @Fmt.Plain(locus.UnseenBaldingNicholsFrequency) when x = 0.
+                The product rule uses the database frequency, or 3/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency) for an allele not observed.
+            </p>
+        }
 
         <label class="field">
             <span class="field-label">θ (co-ancestry, FST)</span>
@@ -45,167 +74,233 @@
             <div class="pair">
                 <label class="field">
                     <span class="field-label">Allele 1</span>
-                    <input type="text" @bind="s1" @bind:event="oninput" />
+                    <input type="text" @bind="S1" @bind:event="oninput" />
                 </label>
                 <label class="field">
                     <span class="field-label">Allele 2</span>
-                    <input type="text" @bind="s2" @bind:event="oninput" />
+                    <input type="text" @bind="S2" @bind:event="oninput" />
                 </label>
             </div>
-            <div class="pair">
-                <label class="field">
-                    <span class="field-label">Frequency of @(Label(s1))</span>
-                    <input type="number" step="any" min="0" max="1" @bind="f1" @bind:event="onchange" />
-                </label>
-                <label class="field">
-                    <span class="field-label">Frequency of @(Label(s2))</span>
-                    <input type="number" step="any" min="0" max="1"
-                           value="@(SameAllele ? f1 : f2)" disabled="@SameAllele"
-                           @onchange="e => f2 = ParseFreq(e.Value)" />
-                </label>
+
+            <div class="freqs">
+                <div class="freqcol">
+                    <h3>Balding-Nichols</h3>
+                    <FreqInput Label="@("Allele " + Label(s1))" Value="@fr.Bn1.Value" Note="@fr.Bn1.Note" Edited="@fr.Bn1.Edited"
+                               OnValue="@(v => bn1Edit = v)" OnReset="@(() => bn1Edit = null)" />
+                    <FreqInput Label="@("Allele " + Label(s2))" Value="@fr.Bn2.Value"
+                               Note="@(SameAllele ? "Same allele as allele 1." : fr.Bn2.Note)"
+                               Edited="@(!SameAllele && fr.Bn2.Edited)" Disabled="@SameAllele"
+                               OnValue="@(v => bn2Edit = v)" OnReset="@(() => bn2Edit = null)" />
+                </div>
+                <div class="freqcol">
+                    <h3>Product rule</h3>
+                    <FreqInput Label="@("Allele " + Label(s1))" Value="@fr.Pr1.Value" Note="@fr.Pr1.Note" Edited="@fr.Pr1.Edited"
+                               OnValue="@(v => pr1Edit = v)" OnReset="@(() => pr1Edit = null)" />
+                    <FreqInput Label="@("Allele " + Label(s2))" Value="@fr.Pr2.Value"
+                               Note="@(SameAllele ? "Same allele as allele 1." : fr.Pr2.Note)"
+                               Edited="@(!SameAllele && fr.Pr2.Edited)" Disabled="@SameAllele"
+                               OnValue="@(v => pr2Edit = v)" OnReset="@(() => pr2Edit = null)" />
+                </div>
             </div>
-            <p class="hint">Only the suspect's alleles need frequencies. The victim's alleles add to the count of alleles already seen.</p>
+            <p class="hint">Frequencies fill in from the database and can be edited. Only the suspect's alleles need frequencies.</p>
         </fieldset>
 
         <button type="button" class="reset" @onclick="Reset">Reset to example</button>
     </section>
 
     <section class="results" aria-live="polite">
-        @if (m.Error is not null)
+        @if (!loaded)
+        {
+            <p class="notice plain">Loading the allele frequency database…</p>
+        }
+        else if (m.Error is not null)
         {
             <p class="notice">@m.Error</p>
         }
         else
         {
+            var main = shown == "with" ? m.With! : m.Alone!;
+            var lr = shown == "product" ? m.Product!.LikelihoodRatio : main.LikelihoodRatio;
+            var pr = shown == "product" ? m.Product!.Probability : main.GenotypeProbability;
+            var victimIn = shown == "with";
+
             <div class="answer">
                 <div class="answer-lr">
-                    <span class="answer-number">@(main!.LikelihoodRatio.ToString("N2", Inv))</span>
-                    <span class="answer-caption">likelihood ratio</span>
+                    <span class="answer-number">@Fmt.Lr(lr)</span>
+                    <span class="answer-caption">likelihood ratio, @MethodName(shown).ToLowerInvariant()</span>
                 </div>
                 <p class="answer-eq">
-                    Pr(E|Hp) ÷ Pr(E|Hd) = 1 ÷ @(P(main!.GenotypeProbability))
+                    Pr(E|Hp) ÷ Pr(E|Hd) = 1 ÷ @Fmt.Prob(pr)
                     <br />
                     <span class="muted">
-                        Hp: @(main.Victim.Count == 2 ? "victim and suspect" : "the suspect") contributed.
-                        Hd: @(main.Victim.Count == 2 ? "victim and an unknown person" : "an unknown person") contributed.
+                        Hp: @(victimIn ? "victim and suspect" : "the suspect") contributed.
+                        Hd: @(victimIn ? "victim and an unknown person" : "an unknown person") contributed.
                     </span>
                 </p>
             </div>
 
             <h2>Three ways to get the match probability</h2>
+            <p class="lede muted">Choose a row to see its working below.</p>
             <table class="compare">
                 <thead>
                     <tr><th>Method</th><th>Alleles seen (n)</th><th>Pr(unknown has suspect genotype)</th><th>LR</th></tr>
                 </thead>
                 <tbody>
-                    @if (m.With?.Victim.Count == 2)
+                    @if (m.With is not null)
                     {
-                        <tr class="current">
-                            <td>Balding-Nichols, victim and suspect</td>
-                            <td>@(m.With!.Conditioning.Count)</td>
-                            <td>@(P(m.With!.GenotypeProbability))</td>
-                            <td>@(m.With!.LikelihoodRatio.ToString("N2", Inv))</td>
+                        <tr class="@(shown == "with" ? "current" : "")">
+                            <td><button type="button" class="pick" aria-pressed="@(shown == "with" ? "true" : "false")" @onclick='() => view = "with"'>Balding-Nichols, victim and suspect</button></td>
+                            <td>@m.With.Conditioning.Count</td>
+                            <td>@Fmt.Prob(m.With.GenotypeProbability)</td>
+                            <td>@Fmt.Lr(m.With.LikelihoodRatio)</td>
                         </tr>
                     }
-                    <tr class="@(m.With?.Victim.Count == 2 ? "" : "current")">
-                        <td>Balding-Nichols, suspect only (NRC II 4.2)</td>
-                        <td>@(m.Alone!.Conditioning.Count)</td>
-                        <td>@(P(m.Alone!.GenotypeProbability))</td>
-                        <td>@(m.Alone!.LikelihoodRatio.ToString("N2", Inv))</td>
+                    <tr class="@(shown == "alone" ? "current" : "")">
+                        <td><button type="button" class="pick" aria-pressed="@(shown == "alone" ? "true" : "false")" @onclick='() => view = "alone"'>Balding-Nichols, suspect only (NRC II 4.2)</button></td>
+                        <td>@m.Alone!.Conditioning.Count</td>
+                        <td>@Fmt.Prob(m.Alone.GenotypeProbability)</td>
+                        <td>@Fmt.Lr(m.Alone.LikelihoodRatio)</td>
                     </tr>
-                    <tr>
-                        <td>Product rule (θ = 0)</td>
+                    <tr class="@(shown == "product" ? "current" : "")">
+                        <td><button type="button" class="pick" aria-pressed="@(shown == "product" ? "true" : "false")" @onclick='() => view = "product"'>Product rule (θ = 0)</button></td>
                         <td>none</td>
-                        <td>@P(m.ProductProbability)</td>
-                        <td>@((1 / m.ProductProbability).ToString("N2", Inv))</td>
+                        <td>@Fmt.Prob(m.Product!.Probability)</td>
+                        <td>@Fmt.Lr(m.Product.LikelihoodRatio)</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h2>Alleles already seen</h2>
-            <div class="pool">
-                @if (main.Victim.Count == 2)
+            <h2>Working: @MethodName(shown)</h2>
+
+            @if (shown == "product")
+            {
+                <FormulaPanel Product="m.Product" Basis1="@fr.Pr1.Basis" Basis2="@fr.Pr2.Basis" />
+            }
+            else
+            {
+                <p class="lede">
+                    Every draw uses the sampling formula below, where <i>x</i> is the number of copies of the
+                    allele already seen, <i>n</i> is the total alleles seen, and <i>p</i> is its population frequency.
+                </p>
+                <div class="formula math">
+                    <div class="math-row">
+                        <span class="lhs">Pr(next = <i>A</i>)</span>
+                        <span class="eq">=</span>
+                        <Frac>
+                            <Num><i>x</i><i>θ</i><span class="op">+</span>(1<span class="op">−</span><i>θ</i>)<i>p</i></Num>
+                            <Den>1<span class="op">+</span>(<i>n</i><span class="op">−</span>1)<i>θ</i></Den>
+                        </Frac>
+                    </div>
+                </div>
+
+                <h3>Complete formula</h3>
+                <FormulaPanel Result="main" Basis1="@fr.Bn1.Basis" Basis2="@fr.Bn2.Basis" />
+                @if (!main.IsHomozygous)
                 {
+                    <p class="hint">The unknown could carry the two alleles in either order. Both orders give the same value, so the total is twice one order.</p>
+                }
+
+                <h3>Alleles already seen</h3>
+                <div class="pool">
+                    @if (main.Victim.Count == 2)
+                    {
+                        <span class="pool-group">
+                            Victim
+                            @foreach (var a in main.Victim)
+                            {
+                                <Chip Allele="@a" Kind="victim" Title="Victim allele" />
+                            }
+                        </span>
+                    }
                     <span class="pool-group">
-                        Victim
-                        @foreach (var a in main.Victim)
+                        Suspect
+                        @foreach (var a in main.Suspect)
                         {
-                            <Chip Allele="@a" Kind="victim" Title="Victim allele" />
+                            <Chip Allele="@a" Kind="suspect" Title="Suspect allele" />
                         }
                     </span>
-                }
-                <span class="pool-group">
-                    Suspect
-                    @foreach (var a in main.Suspect)
-                    {
-                        <Chip Allele="@a" Kind="suspect" Title="Suspect allele" />
-                    }
-                </span>
-                <span class="pool-count">n = @(main!.Conditioning.Count)</span>
-            </div>
+                    <span class="pool-count">n = @(main.Conditioning.Count)</span>
+                </div>
 
-            <h2>Drawing the unknown contributor</h2>
-            <p class="lede">
-                Each draw uses <strong>(x·θ + (1−θ)·p) ÷ (1 + (n−1)·θ)</strong>, where x is the number of
-                copies of the allele already seen, n is the total alleles seen, and p is the population
-                frequency. Highlighted chips are the copies counted in x.
-            </p>
-
-            @foreach (var order in main.Orders)
-            {
-                <table class="draws">
-                    <caption>@order.Label: @string.Join(" then ", order.Draws.Select(d => d.Allele))</caption>
-                    <thead>
-                        <tr><th>Draw</th><th>Seen so far</th><th>x</th><th>n</th><th>Calculation</th><th>Result</th></tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < order.Draws.Count; i++)
-                        {
-                            var d = order.Draws[i];
+                <h3>Each order, draw by draw</h3>
+                @foreach (var order in main.Orders)
+                {
+                    <table class="draws">
+                        <caption>@order.Label: @string.Join(" then ", order.Draws.Select(d => d.Allele))</caption>
+                        <thead>
+                            <tr><th>Draw</th><th>Seen so far</th><th>x</th><th>n</th><th>Calculation</th><th>Result</th></tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < order.Draws.Count; i++)
+                            {
+                                var d = order.Draws[i];
+                                <tr>
+                                    <td>@d.Step</td>
+                                    <td class="seen">
+                                        @foreach (var a in main.Victim)
+                                        {
+                                            <Chip Allele="@a" Kind="victim" Hit="@Same(a, d.Allele)" />
+                                        }
+                                        @foreach (var a in main.Suspect)
+                                        {
+                                            <Chip Allele="@a" Kind="suspect" Hit="@Same(a, d.Allele)" />
+                                        }
+                                        @foreach (var prev in order.Draws.Take(i))
+                                        {
+                                            <Chip Allele="@prev.Allele" Kind="unknown" Hit="@Same(prev.Allele, d.Allele)" Title="Already drawn for the unknown" />
+                                        }
+                                    </td>
+                                    <td>@d.X</td>
+                                    <td>@d.N</td>
+                                    <td class="math calc"><DrawFrac D="d" Symbolic="false" /></td>
+                                    <td class="num">@Fmt.Prob(d.Term)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
                             <tr>
-                                <td>@d.Step</td>
-                                <td class="seen">
-                                    @foreach (var a in main.Victim)
-                                    {
-                                        <Chip Allele="@a" Kind="victim" Hit="@Same(a, d.Allele)" />
-                                    }
-                                    @foreach (var a in main.Suspect)
-                                    {
-                                        <Chip Allele="@a" Kind="suspect" Hit="@Same(a, d.Allele)" />
-                                    }
-                                    @foreach (var prev in order.Draws.Take(i))
-                                    {
-                                        <Chip Allele="@prev.Allele" Kind="unknown" Hit="@Same(prev.Allele, d.Allele)" Title="Already drawn for the unknown" />
-                                    }
-                                </td>
-                                <td>@d.X</td>
-                                <td>@d.N</td>
-                                <td class="calc">@Formula(d)</td>
-                                <td class="num">@d.Term.ToString("0.000000", Inv)</td>
+                                <td colspan="5">Probability of this order</td>
+                                <td class="num">@Fmt.Prob(order.Probability)</td>
                             </tr>
-                        }
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="5">Probability of this order</td>
-                            <td class="num">@order.Probability.ToString("0.000000", Inv)</td>
-                        </tr>
-                    </tfoot>
-                </table>
+                        </tfoot>
+                    </table>
+                }
             }
 
-            <p class="lede">
-                @if (main.IsHomozygous)
-                {
-                    <text>The suspect is homozygous, so there is only one order to count.</text>
-                }
-                else
-                {
-                    <text>The unknown could carry the two alleles in either order, so the two orders are added:
-                    @string.Join(" + ", main.Orders.Select(o => o.Probability.ToString("0.000000", Inv))) =
-                    <strong>@(main!.GenotypeProbability.ToString("0.000000", Inv))</strong>.</text>
-                }
-            </p>
+            @if (locus is not null)
+            {
+                <details class="freqtable">
+                    <summary>Frequency table for @locus.Name</summary>
+                    <table class="freqtbl">
+                        <thead>
+                            <tr>
+                                <th>Allele</th>
+                                <th>Count (x)</th>
+                                <th>Product rule<br />database frequency</th>
+                                <th>Balding-Nichols<br />(x + 1/k) ÷ (N + 1)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var kv in locus.Observed)
+                            {
+                                var mark = Same(kv.Key, s1) || Same(kv.Key, s2) ? "suspect" : (includeVictim && (Same(kv.Key, v1) || Same(kv.Key, v2)) ? "victim" : "");
+                                <tr class="@mark">
+                                    <td>@kv.Key</td>
+                                    <td>@locus.Count(kv.Key)</td>
+                                    <td>@Fmt.Plain(kv.Value)</td>
+                                    <td>@Fmt.Plain(locus.LookupBaldingNichols(kv.Key).Value)</td>
+                                </tr>
+                            }
+                            <tr class="unseen">
+                                <td>Not observed</td>
+                                <td>0</td>
+                                <td>3/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency)</td>
+                                <td>@Fmt.Plain(locus.UnseenBaldingNicholsFrequency)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </details>
+            }
 
             <h2>What this model assumes</h2>
             <ul class="assumptions">
@@ -219,58 +314,133 @@
 
 @code {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-    private const double ExampleFrequency = 0.161398176291793;
+    private const string DefaultLocus = "D8S1179";
+
+    private AlleleDatabase? db;
+    private string? dbError;
+    private bool loaded;
 
     private double theta = 0.01;
     private bool includeVictim = true;
     private string v1 = "11", v2 = "12", s1 = "12", s2 = "13";
-    private double? f1 = ExampleFrequency, f2 = ExampleFrequency;
+    // A value typed over the database one (null = use the database value).
+    private double? bn1Edit, bn2Edit, pr1Edit, pr2Edit;
+    private string locusName = DefaultLocus;
+    private string view = "with";
 
-    private bool SameAllele => string.Equals((s1 ?? "").Trim(), (s2 ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+    // Changing the locus or an allele returns that frequency to the database value.
+    private string LocusName
+    {
+        get => locusName;
+        set { if (locusName != value) { locusName = value; ClearEdits(); } }
+    }
+
+    private string S1 { get => s1; set { if (s1 != value) { s1 = value; bn1Edit = pr1Edit = null; } } }
+    private string S2 { get => s2; set { if (s2 != value) { s2 = value; bn2Edit = pr2Edit = null; } } }
+
+    private void ClearEdits() => bn1Edit = bn2Edit = pr1Edit = pr2Edit = null;
+
+    private LocusFrequencies? locus => db?.Find(locusName);
+
+    private bool SameAllele => Same(s1, s2);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            db = AlleleDatabase.ParseCsv(await Http.GetStringAsync("data/Caucasian_database.csv"));
+            if (db.Find(locusName) is null) locusName = db.Loci[0].Name;
+        }
+        catch (Exception ex)
+        {
+            dbError = $"The allele frequency database could not be loaded, so enter frequencies by hand. ({ex.Message})";
+            locusName = "";
+        }
+        loaded = true;
+    }
 
     private void Reset()
     {
         theta = 0.01;
         includeVictim = true;
         v1 = "11"; v2 = "12"; s1 = "12"; s2 = "13";
-        f1 = f2 = ExampleFrequency;
+        ClearEdits();
+        view = "with";
+        if (db is not null) locusName = DefaultLocus;
     }
 
-    private static double? ParseFreq(object? value) =>
-        double.TryParse(value?.ToString(), NumberStyles.Float, Inv, out var d) ? d : null;
+    private static bool Same(string? a, string? b) => AlleleName.Canon(a) == AlleleName.Canon(b);
 
     private static string Label(string? allele) => string.IsNullOrWhiteSpace(allele) ? "allele" : allele.Trim();
 
-    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    // Basis is the database working behind the value; it is null once the user has typed over it.
+    private sealed record Resolved(double? Value, string Note, bool Edited, FrequencyLookup? Basis);
 
-    private static string P(double v) => v.ToString("0.000000", Inv);
+    private sealed record FrequencySet(Resolved Bn1, Resolved Bn2, Resolved Pr1, Resolved Pr2);
 
-    private static string N(double v) => v.ToString("0.######", Inv);
+    // A user edit wins over the database value.
+    private Resolved Resolve(string? allele, double? edit, FrequencyMethod method)
+    {
+        FrequencyLookup? lookup = null;
+        if (locus is not null && !string.IsNullOrWhiteSpace(allele))
+            lookup = method == FrequencyMethod.BaldingNichols ? locus.LookupBaldingNichols(allele) : locus.LookupProductRule(allele);
 
-    private static string Formula(Draw d) =>
-        $"({d.X} × {N(d.Theta)} + {N(1 - d.Theta)} × {N(d.Frequency)}) ÷ (1 + {d.N - 1} × {N(d.Theta)})";
+        if (edit is double e)
+            return new Resolved(e, lookup is null ? "" : $"Edited. Database-derived value: {Fmt.Plain(lookup.Value)}.", lookup is not null, null);
+        return new Resolved(lookup?.Value, lookup?.Explanation ?? "", false, lookup);
+    }
 
-    private sealed record Evaluation(LocusResult? With, LocusResult? Alone, double ProductProbability, string? Error);
+    private FrequencySet Frequencies()
+    {
+        var bn1 = Resolve(s1, bn1Edit, FrequencyMethod.BaldingNichols);
+        var pr1 = Resolve(s1, pr1Edit, FrequencyMethod.ProductRule);
+        var bn2 = SameAllele ? bn1 : Resolve(s2, bn2Edit, FrequencyMethod.BaldingNichols);
+        var pr2 = SameAllele ? pr1 : Resolve(s2, pr2Edit, FrequencyMethod.ProductRule);
+        return new FrequencySet(bn1, bn2, pr1, pr2);
+    }
 
-    private Evaluation Evaluate()
+    private string Shown(Evaluation m) => view switch
+    {
+        "product" => "product",
+        "alone" => "alone",
+        _ => m.With is not null ? "with" : "alone"
+    };
+
+    private static string MethodName(string key) => key switch
+    {
+        "with" => "Balding-Nichols, victim and suspect",
+        "alone" => "Balding-Nichols, suspect only",
+        _ => "Product rule"
+    };
+
+    private sealed record Evaluation(LocusResult? With, LocusResult? Alone, ProductRuleResult? Product, string? Error);
+
+    private Evaluation Evaluate(FrequencySet fr)
     {
         try
         {
-            var a1 = (s1 ?? "").Trim();
-            var a2 = (s2 ?? "").Trim();
-            var freqs = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            if (a1.Length > 0 && f1 is double x1) freqs[a1] = x1;
-            if (a2.Length > 0 && !Same(a1, a2) && f2 is double x2) freqs[a2] = x2;
+            var a1 = AlleleName.Canon(s1);
+            var a2 = AlleleName.Canon(s2);
+
+            var bnFreqs = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (a1.Length > 0 && fr.Bn1.Value is double b1) bnFreqs[a1] = b1;
+            if (a2.Length > 0 && fr.Bn2.Value is double b2) bnFreqs[a2] = b2;
+
+            var prFreqs = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (a1.Length > 0 && fr.Pr1.Value is double q1) prFreqs[a1] = q1;
+            if (a2.Length > 0 && fr.Pr2.Value is double q2) prFreqs[a2] = q2;
 
             var suspect = new[] { a1, a2 };
-            var alone = BnCalculator.Compute(theta, Array.Empty<string>(), suspect, freqs);
-            var with = includeVictim ? BnCalculator.Compute(theta, new[] { v1, v2 }, suspect, freqs) : null;
-            var product = BnCalculator.ProductRuleProbability(suspect, freqs);
-            return new Evaluation(with, alone, product, null);
+            var alone = BnCalculator.Compute(theta, Array.Empty<string>(), suspect, bnFreqs);
+
+            var victimEntered = includeVictim && !(string.IsNullOrWhiteSpace(v1) && string.IsNullOrWhiteSpace(v2));
+            var with = victimEntered ? BnCalculator.Compute(theta, new[] { v1, v2 }, suspect, bnFreqs) : null;
+
+            return new Evaluation(with, alone, BnCalculator.ProductRule(suspect, prFreqs), null);
         }
         catch (ArgumentException ex)
         {
-            return new Evaluation(null, null, 0, ex.Message);
+            return new Evaluation(null, null, null, ex.Message);
         }
     }
 }

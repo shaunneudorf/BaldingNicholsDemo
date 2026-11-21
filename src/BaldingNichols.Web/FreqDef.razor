@@ -1,0 +1,46 @@
+@* Shows where a frequency in the formula comes from. Basis is null when the value was typed in by hand. *@
+<div class="math-row freqdef">
+    <span class="lhs"><i>p</i><sub>@Sub</sub></span>
+    <span class="eq">=</span>
+    @if (Basis is null)
+    {
+        <span>@Fmt.Plain(Value)</span>
+        <span class="note">allele @Allele, entered by hand</span>
+    }
+    else if (Basis.Method == FrequencyMethod.BaldingNichols)
+    {
+        <Frac>
+            <Num><i>x</i><sub>i</sub><span class="op">+</span>1/<i>k</i></Num>
+            <Den><i>N</i><sub>a</sub><span class="op">+</span>1</Den>
+        </Frac>
+        <span class="eq">=</span>
+        <Frac>
+            <Num>@Basis.Count<span class="op">+</span>1/@Basis.K</Num>
+            <Den>@Basis.N<span class="op">+</span>1</Den>
+        </Frac>
+        <span class="eq">=</span>
+        <span>@Fmt.Plain(Value)</span>
+        <span class="note">@("allele " + Allele + (Basis.Observed ? "" : ", not observed"))</span>
+    }
+    else if (Basis.Observed)
+    {
+        <span>@Fmt.Plain(Value)</span>
+        <span class="note">allele @Allele, database frequency</span>
+    }
+    else
+    {
+        <Frac><Num>3</Num><Den>2<i>N</i></Den></Frac>
+        <span class="eq">=</span>
+        <Frac><Num>3</Num><Den>@Basis.N</Den></Frac>
+        <span class="eq">=</span>
+        <span>@Fmt.Plain(Value)</span>
+        <span class="note">allele @Allele, not observed (2<i>N</i> = @Basis.N alleles)</span>
+    }
+</div>
+
+@code {
+    [Parameter] public string Sub { get; set; } = "1";
+    [Parameter] public string Allele { get; set; } = "";
+    [Parameter] public double Value { get; set; }
+    [Parameter] public FrequencyLookup? Basis { get; set; }
+}

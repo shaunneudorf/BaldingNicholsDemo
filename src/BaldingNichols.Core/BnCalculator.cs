@@ -35,6 +35,14 @@ public sealed record LocusResult(
     public double LikelihoodRatio => 1.0 / GenotypeProbability;
 }
 
+/// <summary>Product-rule (θ = 0) result for the suspect's genotype.</summary>
+public sealed record ProductRuleResult(IReadOnlyList<string> Suspect, double P1, double P2)
+{
+    public bool IsHomozygous => string.Equals(Suspect[0], Suspect[1], StringComparison.OrdinalIgnoreCase);
+    public double Probability => IsHomozygous ? P1 * P1 : 2 * P1 * P2;
+    public double LikelihoodRatio => 1.0 / Probability;
+}
+
 public static class BnCalculator
 {
     private static readonly StringComparer Cmp = StringComparer.OrdinalIgnoreCase;
@@ -60,7 +68,7 @@ public static class BnCalculator
         if (v.Count != 0 && v.Count != 2)
             throw new ArgumentException("Enter both victim alleles, or leave both blank.");
 
-        var freq = new Dictionary<string, double>(frequencies, Cmp);
+        var freq = Canonical(frequencies);
         foreach (var a in s.Distinct(Cmp))
         {
             if (!freq.TryGetValue(a, out var p) || double.IsNaN(p) || p <= 0 || p > 1)
@@ -78,12 +86,23 @@ public static class BnCalculator
     }
 
     /// <summary>Plain product rule (θ = 0): 2pq for a heterozygote, p² for a homozygote.</summary>
-    public static double ProductRuleProbability(IEnumerable<string> suspect, IReadOnlyDictionary<string, double> frequencies)
+    public static ProductRuleResult ProductRule(IEnumerable<string> suspect, IReadOnlyDictionary<string, double> frequencies)
     {
         var s = suspect.Select(Norm).ToList();
-        var freq = new Dictionary<string, double>(frequencies, Cmp);
-        return Cmp.Equals(s[0], s[1]) ? freq[s[0]] * freq[s[0]] : 2 * freq[s[0]] * freq[s[1]];
+        if (s.Count != 2 || s.Any(a => a.Length == 0))
+            throw new ArgumentException("Enter both suspect alleles.");
+
+        var freq = Canonical(frequencies);
+        double Get(string a) =>
+            freq.TryGetValue(a, out var p) && !double.IsNaN(p) && p > 0 && p <= 1
+                ? p
+                : throw new ArgumentException($"Enter a frequency between 0 and 1 for allele {a}.");
+
+        return new ProductRuleResult(s, Get(s[0]), Get(s[1]));
     }
+
+    public static double ProductRuleProbability(IEnumerable<string> suspect, IReadOnlyDictionary<string, double> frequencies) =>
+        ProductRule(suspect, frequencies).Probability;
 
     private static OrderResult BuildOrder(
         string label, List<string> pool, string first, string second,
@@ -101,5 +120,12 @@ public static class BnCalculator
         return new OrderResult(label, draws);
     }
 
-    private static string Norm(string? a) => (a ?? "").Trim();
+    private static string Norm(string? a) => AlleleName.Canon(a);
+
+    private static Dictionary<string, double> Canonical(IReadOnlyDictionary<string, double> frequencies)
+    {
+        var d = new Dictionary<string, double>(Cmp);
+        foreach (var kv in frequencies) d[Norm(kv.Key)] = kv.Value;
+        return d;
+    }
 }
