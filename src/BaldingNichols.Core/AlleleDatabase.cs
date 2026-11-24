@@ -61,12 +61,12 @@ public sealed class LocusFrequencies
     public double UnseenBaldingNicholsFrequency => (1.0 / K) / (N + 1);
 
     /// <summary>
-    /// Product-rule frequency of an unseen allele: 3/2N, where 2N is the number of alleles in the database.
-    /// (In this file N is already the allele count, so this is 3/N.) Change the 3 here to use another minimum.
+    /// Product-rule frequency of an unseen allele: 5/2N, where 2N is the number of alleles in the database.
+    /// (In this file N is already the allele count, so this is 5/N.)
     /// </summary>
     public double UnseenProductRuleFrequency => ProductRuleUnseenNumerator / N;
 
-    public const double ProductRuleUnseenNumerator = 3;
+    public const double ProductRuleUnseenNumerator = 5;
 
     /// <summary>Balding-Nichols frequency: (x + 1/k) / (N + 1), for observed and unseen alleles alike.</summary>
     public FrequencyLookup LookupBaldingNichols(string allele)
@@ -78,13 +78,13 @@ public sealed class LocusFrequencies
             FrequencyMethod.BaldingNichols, x, K, N);
     }
 
-    /// <summary>Product-rule frequency: the database frequency, or 3/2N if the allele was not observed.</summary>
+    /// <summary>Product-rule frequency: the database frequency, or 5/2N if the allele was not observed.</summary>
     public FrequencyLookup LookupProductRule(string allele)
     {
         if (_byAllele.TryGetValue(AlleleName.Canon(allele), out var p))
             return new FrequencyLookup(p, true, "Database frequency.", FrequencyMethod.ProductRule, Count(allele), K, N);
 
-        return new FrequencyLookup(UnseenProductRuleFrequency, false, $"Not observed: 3 ÷ 2N = 3 ÷ {N}.",
+        return new FrequencyLookup(UnseenProductRuleFrequency, false, $"Not observed: 5 ÷ 2N = 5 ÷ {N}.",
             FrequencyMethod.ProductRule, 0, K, N);
     }
 }

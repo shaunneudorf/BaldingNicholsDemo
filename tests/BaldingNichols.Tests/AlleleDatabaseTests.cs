@@ -51,7 +51,7 @@ public class AlleleDatabaseTests
         Assert.Equal((1.0 / 2) / 51, r.Value, 12);
     }
 
-    // ---- Product rule: database frequency, or 3/2N when unseen ----
+    // ---- Product rule: database frequency, or 5/2N when unseen ----
 
     [Fact]
     public void ProductRule_ObservedAllele_IsTheRawDatabaseFrequency()
@@ -62,11 +62,11 @@ public class AlleleDatabaseTests
     }
 
     [Fact]
-    public void ProductRule_UnseenAllele_UsesThreeOverTwoN()
+    public void ProductRule_UnseenAllele_UsesFiveOverTwoN()
     {
-        // N is the allele count (2N individuals' worth), so 3/2N = 3/100 for L1 and 3/50 for L2.
-        Assert.Equal(3.0 / 100, Db().Find("L1")!.LookupProductRule("40").Value, 12);
-        Assert.Equal(3.0 / 50, Db().Find("L2")!.LookupProductRule("8").Value, 12);
+        // N is the allele count (2N individuals' worth), so 5/2N = 5/100 for L1 and 5/50 for L2.
+        Assert.Equal(5.0 / 100, Db().Find("L1")!.LookupProductRule("40").Value, 12);
+        Assert.Equal(5.0 / 50, Db().Find("L2")!.LookupProductRule("8").Value, 12);
         Assert.False(Db().Find("L2")!.LookupProductRule("8").Observed);
     }
 

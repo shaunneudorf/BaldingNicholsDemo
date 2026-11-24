@@ -42,7 +42,7 @@
             <p class="hint">
                 N = @locus.N alleles in the database, k = @locus.K observed allele designations.
                 Balding-Nichols uses (x + 1/k) ÷ (N + 1) for every allele, which is @Fmt.Plain(locus.UnseenBaldingNicholsFrequency) when x = 0.
-                The product rule uses the database frequency, or 3/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency) for an allele not observed.
+                The product rule uses the database frequency, or 5/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency) for an allele not observed.
             </p>
         }
 
@@ -294,7 +294,7 @@
                             <tr class="unseen">
                                 <td>Not observed</td>
                                 <td>0</td>
-                                <td>3/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency)</td>
+                                <td>5/2N = @Fmt.Plain(locus.UnseenProductRuleFrequency)</td>
                                 <td>@Fmt.Plain(locus.UnseenBaldingNicholsFrequency)</td>
                             </tr>
                         </tbody>

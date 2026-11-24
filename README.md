@@ -22,8 +22,8 @@ suspect's allele frequencies fill in automatically; any value can be edited, and
 - Balding-Nichols draws use `(x + 1/k) / (N + 1)` for every allele, where x is the number of copies in the
   database, k is the number of designations with non-zero observations and N is the number of alleles. For an allele
   not observed (x = 0) this is `(1/k) / (N + 1)`.
-- The product rule uses the database frequency directly, and `3/2N` for an allele not observed. In this file N is
-  already the allele count (that is, 2N for a count of individuals), so 3/2N is computed as 3 / N. The 3 is the
+- The product rule uses the database frequency directly, and `5/2N` for an allele not observed. In this file N is
+  already the allele count (that is, 2N for a count of individuals), so 5/2N is computed as 5 / N. The 5 is the
   constant `ProductRuleUnseenNumerator` in `AlleleDatabase.cs`.
 - The file holds frequencies rather than counts, so x is recovered as frequency × N and rounded.
 
